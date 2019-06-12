@@ -18,7 +18,7 @@ class DataProcessor:
     user_sns_dict = {}  # 存储 user_sns.txt 里的信息
     user_key_dict = {}  # 存储 user_key_word.txt 里的信息
 
-    def strList2intList(strList, correctNum):
+    def strList2intList(self,strList, correctNum):
         # 将string的list转成int的list存储以缩小内存，若不合int形式则用correctNum代替。
         ret = []
         for ch in strList:
@@ -28,7 +28,7 @@ class DataProcessor:
                 ret.append(correctNum)
         return ret
 
-    def str2int(str, correctNum):
+    def str2int(self,str, correctNum):
         # 将string转成int存储以缩小内存，若不合int形式则用correctNum代替。
         if re.match(INT_PATTERN, str):
             return int(str)
@@ -74,7 +74,7 @@ class DataProcessor:
                 # 存储分类目录和相关关键词
                 if not self.item_dict.__contains__(int(item_msg[0])):
                     self.item_dict[int(item_msg[0])] = []
-                self.item_dict[int(item_msg[0])].append(
+                self.item_dict[int(item_msg[0])]=(
                     {'catagory': self.strList2intList(item_msg[1].split('.'), 0), 'tags': set(self.strList2intList(item_msg[2].split(';'), 0))})
 
         # 读 user_profile.txt
@@ -154,20 +154,22 @@ class DataProcessor:
     def get_user_by_tag(self, item):
         users = []
         for key in range(len(self.user_tag_dict)):
-            if(self.user_tag_dict[key]['itemid'] == item):
-                users.append(key)
+            if self.user_tag_dict.__contains__(key):
+                for index in range(len(self.user_tag_dict[key])):  
+                    if (self.user_tag_dict[key][index]['itemid'] == item):
+                        users.append(key)
         return users
 
     # 计算兴趣标签的重合度
     # 计算方法是：二者的交集大小 / 二者的并集大小
     def get_tag_overlap(self, key, user):
-        return len(self.user_dict[key] & self.user_dict[user]) * 1.0 / len(self.user_dict[key] | self.user_dict[user])
+        return len(self.user_dict[key]['tags'] & self.user_dict[user]['tags']) * 1.0 / len(self.user_dict[key]['tags'] | self.user_dict[user]['tags'])
 
     # 归一化sigmoid函数
     def sigmoid(self, n):
         return 1.0 / (1 + np.exp(-n))
 
-    def get_tag_value(item):
+    def get_tag_value(self,item):
         item_catagory = self.item_dict[item]['catagory']
         return item_catagory[0] * BASE_CATAGORY * BASE_CATAGORY * BASE_CATAGORY + item_catagory[1] * BASE_CATAGORY * BASE_CATAGORY + item_catagory[2] * BASE_CATAGORY + item_catagory[3]
 
@@ -208,21 +210,22 @@ class DataProcessor:
                 # 子特征2.1
                 tag_overlap = tag_overlap + self.get_tag_overlap(key, user)
                 # 子特征2.2
-                if user in self.user_sns_dict[key]:
+                if self.user_sns_dict.__contains__(key) and user in self.user_sns_dict[key]:
                     followee_portion = followee_portion + 1
                 # 子特征2.3
-                if key in self.user_sns_dict[user]:
+                if self.user_sns_dict.__contains__(user) and key in self.user_sns_dict[user]:
                     follower_portion = follower_portion + 1
                 # 子特征2.4
-                if (self.user_action_dict[key])[user]:
+                if self.user_action_dict.__contains__(key) and self.user_action_dict[key].__contains__(user) and (self.user_action_dict[key])[user]:
                     at_user = at_user + \
                         int((self.user_action_dict[key])[user]['at'])
                     re_user = re_user + \
                         int((self.user_action_dict[key])[user]['re'])
                     co_user = co_user + \
                         int((self.user_action_dict[key])[user]['co'])
+
                 # 子特征2.5
-                if (self.user_action_dict[user])[key]:
+                if self.user_action_dict.__contains__(user) and self.user_action_dict[user].__contains__(key) and (self.user_action_dict[user])[key]:
                     user_at = user_at + \
                         int((self.user_action_dict[user])[key]['at'])
                     user_re = user_re + \
@@ -236,7 +239,7 @@ class DataProcessor:
             for u in self.user_sns_dict:
                 if key in self.user_sns_dict[u]:
                     follower_sum = follower_sum + 1
-            follower_portion = follower_portion / follower_sum
+            follower_portion = follower_portion / follower_sum if follower_sum != 0 else 0
             at_user = self.sigmoid(at_user / user_tag_list_len)
             re_user = self.sigmoid(re_user / user_tag_list_len)
             co_user = self.sigmoid(co_user / user_tag_list_len)
@@ -257,14 +260,15 @@ class DataProcessor:
             return [key_overlap, tag_overlap, followee_portion, follower_portion, at_user, re_user, co_user, user_at, user_re, user_co, tag_value, birth, gender, tweetnum]
 
     def write_dataset(self):
+
         with open('train.csv', 'w') as out:
-            for key in self.user_tag_dict:
+            for i,key in enumerate(tqdm(self.user_tag_dict)):
                 if self.user_key_dict.__contains__(key):
                     key_weight_dict = self.user_key_dict[key]
                 else:
                     continue
-                for index in range(len(self.user_tag_dict[key])):
-                    item = (self.user_tag_dict[key])[index]['itemid']
+                for index in tqdm(range(len(self.user_tag_dict[key]))):
+                    item = int((self.user_tag_dict[key])[index]['itemid'])
                     res = int((self.user_tag_dict[key])[index]['res'])
                     features = self.get_feature(
                         key, key_weight_dict, index, item)
@@ -275,4 +279,4 @@ class DataProcessor:
                                     .rstrip('.'))
 
                     vals = ','.join(vals)
-                    out.write(','.join([vals, res]) + '\n')
+                    out.write(','.join([vals, str(res)]) + '\n')

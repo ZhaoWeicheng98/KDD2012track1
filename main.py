@@ -21,6 +21,7 @@ loader_val = DataLoader(val_data, batch_size=100,
 
 # feature_sizes = np.loadtxt('./data/feature_sizes.txt', delimiter=',')
 # feature_sizes = [int(x) for x in feature_sizes]
+# 对于实数型特征，feature_sizes中标识一个[1]，对于one-hot特征，标识[类别总数]
 feature_sizes = [1] * 10
 print(feature_sizes)
 
