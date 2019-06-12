@@ -2,10 +2,12 @@ import random
 import collections
 import numpy as np
 from tqdm import tqdm
+import re
 BASE_DIR = "./track1/"  # 数据根目录
 TRAIN_LEN = 50000000  # 训练和测试所用数据量
 PROPORTION = 0.8  # 训练集占总数据量的多少
-
+INT_PATTERN = "^-?[0-9]+$"
+BASE_CATAGORY = 101 # 对catagory计量时的基
 
 class DataProcessor:
 
@@ -15,6 +17,23 @@ class DataProcessor:
     user_action_dict = {}  # 存储 user_action.txt 里的信息
     user_sns_dict = {}  # 存储 user_sns.txt 里的信息
     user_key_dict = {}  # 存储 user_key_word.txt 里的信息
+
+    def strList2intList(strList, correctNum):
+        # 将string的list转成int的list存储以缩小内存，若不合int形式则用correctNum代替。
+        ret = []
+        for ch in strList:
+            if re.match(INT_PATTERN, ch):
+                ret.append(int(ch))
+            else:
+                ret.append(correctNum)
+        return ret
+
+    def str2int(str, correctNum):
+        # 将string转成int存储以缩小内存，若不合int形式则用correctNum代替。
+        if re.match(INT_PATTERN, str):
+            return int(str)
+        else:
+            return correctNum
 
     def __init__(self):
         # 读 rec_log_train.txt
@@ -27,17 +46,17 @@ class DataProcessor:
                 train_msg = train_line.split('\t')
                 # 存储所有正向数据
                 if train_msg[2] == '1':
-                    if not self.user_tag_dict.__contains__(train_msg[0]):
-                        self.user_tag_dict[train_msg[0]] = []
-                    self.user_tag_dict[train_msg[0]].append(
+                    if not self.user_tag_dict.__contains__(int(train_msg[0])):
+                        self.user_tag_dict[int(train_msg[0])] = []
+                    self.user_tag_dict[int(train_msg[0])].append(
                         {'itemid': int(train_msg[1]), 'res': int(train_msg[2]), 'time': int(train_msg[3])})
                 # 由于原数据集中有大约92%的负向数据，故为了保持正负向数据的均衡，以10%的概率随机挑选负向数据
                 else:
                     ran = random.randint(0, 9)
                     if ran == 0:
-                        if not self.user_tag_dict.__contains__(train_msg[0]):
-                            self.user_tag_dict[train_msg[0]] = []
-                        self.user_tag_dict[train_msg[0]].append(
+                        if not self.user_tag_dict.__contains__(int(train_msg[0])):
+                            self.user_tag_dict[int(train_msg[0])] = []
+                        self.user_tag_dict[int(train_msg[0])].append(
                             {'itemid': int(train_msg[1]), 'res': int(train_msg[2]), 'time': int(train_msg[3])})
             else:
                 break
@@ -53,10 +72,10 @@ class DataProcessor:
                 # 根据\t分割
                 item_msg = item_line.split('\t')
                 # 存储分类目录和相关关键词
-                if not self.item_dict.__contains__(item_msg[0]):
-                    self.item_dict[item_msg[0]] = []
-                self.item_dict[item_msg[0]].append(
-                    {'catagory': item_msg[1].split('.'), 'tags': set(item_msg[2].split(';'))})
+                if not self.item_dict.__contains__(int(item_msg[0])):
+                    self.item_dict[int(item_msg[0])] = []
+                self.item_dict[int(item_msg[0])].append(
+                    {'catagory': self.strList2intList(item_msg[1].split('.'), 0), 'tags': set(self.strList2intList(item_msg[2].split(';'), 0))})
 
         # 读 user_profile.txt
         print('loading user_profile.txt')
@@ -69,10 +88,9 @@ class DataProcessor:
                 # 根据\t分割
                 user_profile_msg = user_profile_line.split('\t')
                 # 存储用户信息
-                if not self.user_dict.__contains__(user_profile_msg[0]):
-                    self.user_dict[user_profile_msg[0]] = {}
-                self.user_dict[user_profile_msg[0]] = {'birth': user_profile_msg[1], 'gender': user_profile_msg[2],
-                                                       'tweetnum': user_profile_msg[3], 'tags': set(user_profile_msg[4].split(';'))}
+                if not self.user_dict.__contains__(int(user_profile_msg[0])):
+                    self.user_dict[int(user_profile_msg[0])] = {}
+                self.user_dict[int(user_profile_msg[0])] = {'birth': self.str2int(user_profile_msg[1], 2000), 'gender': self.str2int(user_profile_msg[2], 0), 'tweetnum': self.str2int(user_profile_msg[3], 0), 'tags': set(self.strList2intList(user_profile_msg[4].split(';'), 0))}
 
         # 读 user_action.txt
         print('loading user_action.txt')
@@ -83,10 +101,10 @@ class DataProcessor:
                 break
             else:
                 user_action_msg = user_action_line.split('\t')
-                if not self.user_action_dict.__contains__(user_action_msg[0]):
-                    self.user_action_dict[user_action_msg[0]] = {}
-                (self.user_action_dict[user_action_msg[0]])[user_action_msg[1]] = {
-                    'at': user_action_msg[2], 're': user_action_msg[3], 'co': user_action_msg[4]}
+                if not self.user_action_dict.__contains__(int(user_action_msg[0])):
+                    self.user_action_dict[int(user_action_msg[0])] = {}
+                (self.user_action_dict[int(user_action_msg[0])])[int(user_action_msg[1])] = {
+                    'at': int(user_action_msg[2]), 're': int(user_action_msg[3]), 'co': int(user_action_msg[4])}
 
         # 读 user_sns.txt
         print('loading user_sns.txt')
@@ -97,9 +115,9 @@ class DataProcessor:
                 break
             else:
                 user_sns_msg = user_sns_line.split('\t')
-                if not self.user_sns_dict.__contains__(user_sns_msg[0]):
-                    self.user_sns_dict[user_sns_msg[0]] = []
-                self.user_sns_dict[user_sns_msg[0]].append(user_sns_msg[1])
+                if not self.user_sns_dict.__contains__(int(user_sns_msg[0])):
+                    self.user_sns_dict[int(user_sns_msg[0])] = []
+                self.user_sns_dict[int(user_sns_msg[0])].append(int(user_sns_msg[1]))
 
         # 读 user_key_word.txt
         print('loading user_keyword.txt')
@@ -111,12 +129,12 @@ class DataProcessor:
             else:
                 user_key_word_msg = user_key_word_line.split('\t')
                 key_words = user_key_word_msg[1].split(';')
-                if not self.user_key_dict.__contains__(user_key_word_msg[0]):
-                    self.user_key_dict[user_key_word_msg[0]] = {}
+                if not self.user_key_dict.__contains__(int(user_key_word_msg[0])):
+                    self.user_key_dict[int(user_key_word_msg[0])] = {}
                 for kw in key_words:
                     kw_split = kw.split(':')
-                    (self.user_key_dict[user_key_word_msg[0]])[
-                        kw_split[0]] = kw_split[1]
+                    (self.user_key_dict[int(user_key_word_msg[0])])[
+                        int(kw_split[0])] = float(kw_split[1])
 
     # 计算标签的关键字和用户的关键字之间的重合度
     # 计算方法是：二者交集中的所有元素的权重之和 / 二者并集大小
@@ -128,6 +146,9 @@ class DataProcessor:
                 ans += float(key_weight_dict[key])
         element_num = len(set(key_weight_dict.keys()) | item_key_set)
         return ans / element_num
+
+    # 计算分类的重合度
+    # 计算方法：从大类开始往下看，发现不匹配则结束，返回匹配数（0-4）
 
     # 从训练数据找到所有关注该标签的用户
     def get_user_by_tag(self, item):
@@ -146,8 +167,16 @@ class DataProcessor:
     def sigmoid(self, n):
         return 1.0 / (1 + np.exp(-n))
 
+    def get_tag_value(item):
+        item_catagory = self.item_dict[item]['catagory']
+        return item_catagory[0] * BASE_CATAGORY * BASE_CATAGORY * BASE_CATAGORY + item_catagory[1] * BASE_CATAGORY * BASE_CATAGORY + item_catagory[2] * BASE_CATAGORY + item_catagory[3]
+
     # 获得所有特征值
     def get_feature(self, key, key_weight_dict, index, item):
+        # key: 训练集中的用户编号
+        # key_weight_dict: 用户关键词及权重的字典
+        # index: 训练集中该用户关注标签情况列表的下标
+        # item: 训练集中的标签
         item_key_set = self.item_dict[item]['tags']
 
         # 特征1：标签的关键字和用户的关键字之间的重合度
@@ -214,7 +243,18 @@ class DataProcessor:
             user_at = self.sigmoid(user_at / user_tag_list_len)
             user_re = self.sigmoid(user_re / user_tag_list_len)
             user_co = self.sigmoid(user_co / user_tag_list_len)
-            return [key_overlap, tag_overlap, followee_portion, follower_portion, at_user, re_user, co_user, user_at, user_re, user_co]
+
+            # 特征3：标签本身的特性
+            # 将标签的分类树映射到一个值，保证两个标签分类上越接近，值就越接近。
+            tag_value = self.get_tag_value(item)
+
+            # 特征四：用户本身的特性
+            # 即用户的出生年份，性别和发微博数量
+            birth = self.user_dict[key]['birth']
+            gender = self.user_dict[key]['gender']
+            tweetnum = self.user_dict[key]['tweetnum']
+
+            return [key_overlap, tag_overlap, followee_portion, follower_portion, at_user, re_user, co_user, user_at, user_re, user_co, tag_value, birth, gender, tweetnum]
 
     def write_dataset(self):
         with open('train.csv', 'w') as out:
