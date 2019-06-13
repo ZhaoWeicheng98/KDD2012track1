@@ -9,8 +9,7 @@ BASE_DIR = "./track1/"  # 数据根目录
 TRAIN_LEN = 100000  # 训练和测试所用数据量
 PROPORTION = 0.8  # 训练集占总数据量的多少
 INT_PATTERN = "^-?[0-9]+$"
-BASE_CATAGORY = 101  # 对catagory计量时的基
-
+BASE_CATAGORY = 21 # 对catagory计量时的基
 
 class DataProcessor:
 
@@ -176,6 +175,8 @@ class DataProcessor:
         # key_weight_dict: 用户关键词及权重的字典
         # index: 训练集中该用户关注标签情况列表的下标
         # item: 训练集中的标签
+        key = int(key)
+        item = int(item)
         item_key_set = self.item_dict[item]['tags']
 
         # 特征1：标签的关键字和用户的关键字之间的重合度
@@ -248,7 +249,7 @@ class DataProcessor:
 
             # 特征3：标签本身的特性
             # 将标签的分类树映射到一个值，保证两个标签分类上越接近，值就越接近。
-            tag_value = self.get_tag_value(item)
+            tag_value = self.sigmoid(self.get_tag_value(item))
 
         # 特征四：用户本身的特性
         # 即用户的出生年份，性别和发微博数量
@@ -261,13 +262,14 @@ class DataProcessor:
     def write_dataset(self):
         with open('train.csv', 'w') as out:
             for i in tqdm(range(TRAIN_LEN)):
-                idx,key = random.choice(list(self.user_tag_dict.items()))
-                print(idx,key)
-                outs = []
-                if self.user_key_dict.__contains__(key):
-                    key_weight_dict = self.user_key_dict[key]
-                else:
-                    continue
+                key,key_weight_dict= random.choice(list(self.user_tag_dict.items()))
+                print(key,key_weight_dict)
+                # key_weight_dict = self.user_key_dict[key]
+                # outs = []
+                # if self.user_key_dict.__contains__(key):
+                #     key_weight_dict = self.user_key_dict[key]
+                # else:
+                #     continue
                 for index in tqdm(range(len(self.user_tag_dict[key]))):
                     item = int((self.user_tag_dict[key])[index]['itemid'])
                     res = int((self.user_tag_dict[key])[index]['res'])
