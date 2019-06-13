@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 
 BASE_DIR = "./track1/"  # 数据根目录
-TRAIN_LEN = 50000000  # 训练和测试所用数据量
+TRAIN_LEN = 100000  # 训练和测试所用数据量
 PROPORTION = 0.8  # 训练集占总数据量的多少
 INT_PATTERN = "^-?[0-9]+$"
 BASE_CATAGORY = 101  # 对catagory计量时的基
@@ -42,8 +42,7 @@ class DataProcessor:
         # 读 rec_log_train.txt
         print('loading rec_log_train.txt')
         rec_log_train_txt = open(BASE_DIR + "rec_log_train.txt")
-        for i in tqdm(range(TRAIN_LEN)):
-            train_line = rec_log_train_txt.readline()
+        for i, train_line in enumerate(tqdm(rec_log_train_txt)):
             if train_line:
                 # 根据\t分割
                 train_msg = train_line.split('\t')
@@ -202,7 +201,7 @@ class DataProcessor:
         user_at = 0.0
         user_re = 0.0
         user_co = 0.0
-
+        tag_value = 0
         if user_tag_list_len > 0:
             for user in user_tag_list:
                 # 子特征2.1
@@ -251,17 +250,19 @@ class DataProcessor:
             # 将标签的分类树映射到一个值，保证两个标签分类上越接近，值就越接近。
             tag_value = self.get_tag_value(item)
 
-            # 特征四：用户本身的特性
-            # 即用户的出生年份，性别和发微博数量
-            birth = self.user_dict[key]['birth']
-            gender = self.user_dict[key]['gender']
-            tweetnum = self.user_dict[key]['tweetnum']
+        # 特征四：用户本身的特性
+        # 即用户的出生年份，性别和发微博数量
+        birth = self.user_dict[key]['birth']
+        gender = self.user_dict[key]['gender']
+        tweetnum = self.user_dict[key]['tweetnum']
 
         return [key_overlap, tag_overlap, followee_portion, follower_portion, at_user, re_user, co_user, user_at, user_re, user_co, tag_value, birth, gender, tweetnum]
 
     def write_dataset(self):
         with open('train.csv', 'w') as out:
-            for i, key in enumerate(tqdm(self.user_tag_dict)):
+            for i in tqdm(range(TRAIN_LEN)):
+                idx,key = random.choice(list(self.user_tag_dict.items()))
+                print(idx,key)
                 outs = []
                 if self.user_key_dict.__contains__(key):
                     key_weight_dict = self.user_key_dict[key]
