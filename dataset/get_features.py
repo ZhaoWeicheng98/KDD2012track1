@@ -160,25 +160,23 @@ class DataProcessor:
         element_num = len(set(key_weight_dict_key) | item_key_set)
         return ans / element_num
 
-    # 计算分类的重合度
-    # 计算方法：从大类开始往下看，发现不匹配则结束，返回匹配数（0-4）
-
     # 从训练数据找到所有关注该标签的用户
     def get_user_by_tag(self, item):
         users = []
         for key in range(len(self.user_tag_dict)):
             # 避免多次访问self.user_tag_dict
             tempDict1 = self.user_tag_dict[key]
-            for index in range(len(self.user_tag_dict.get(key, []))):
+            temp11 = self.user_tag_dict.get(key, [])
+            for index in range(len(temp11)):
                 if (tempDict1[index]['itemid'] == item):
                     users.append(key)
         return users
 
     # 计算兴趣标签的重合度
     # 计算方法是：二者的交集大小 / 二者的并集大小
-    def get_tag_overlap(self, key, user):
+    def get_tag_overlap(self, temp7, user):
         # 避免重复访问
-        temp2 = self.user_dict[key]['tags']
+        temp2 = temp7['tags']
         temp3 = self.user_dict[user]['tags']
         return len(temp2 & temp3) * 1.0 / len(temp2 | temp3)
 
@@ -186,9 +184,15 @@ class DataProcessor:
     def sigmoid(self, n):
         return 1.0 / (1 + np.exp(-n))
 
-    def get_tag_value(self, item):
-        item_catagory = self.item_dict[item]['catagory']
-        return item_catagory[0] * BASE_CATAGORY * BASE_CATAGORY * BASE_CATAGORY + item_catagory[1] * BASE_CATAGORY * BASE_CATAGORY + item_catagory[2] * BASE_CATAGORY + item_catagory[3]
+    # 计算分类的重合度
+    # 居然有不够四层的，辣鸡腾讯
+    def get_tag_value(self, temp10):
+        item_catagory = temp10['catagory']
+        ret = 0
+        for i in item_catagory:
+            ret = ret * BASE_CATAGORY
+            ret = ret + item_catagory[i]
+        return ret
 
     # 获得所有特征值
     def get_feature(self, key, key_weight_dict, index, item):
@@ -198,7 +202,8 @@ class DataProcessor:
         # item: 训练集中的标签
         key = int(key)
         item = int(item)
-        item_key_set = self.item_dict[item]['tags']
+        temp10 = self.item_dict[item]
+        item_key_set = temp10['tags']
 
         # 特征1：标签的关键字和用户的关键字之间的重合度
         key_overlap = self.get_key_overlap(key_weight_dict, item_key_set)
@@ -224,10 +229,12 @@ class DataProcessor:
         user_re = 0.0
         user_co = 0.0
         tag_value = 0
+
+        temp7 = self.user_dict[key]
         if user_tag_list_len > 0:
             for user in user_tag_list:
                 # 子特征2.1
-                tag_overlap = tag_overlap + self.get_tag_overlap(key, user)
+                tag_overlap = tag_overlap + self.get_tag_overlap(temp7, user)
                 # 子特征2.2
                 # 只要用了两次以上的都暂存起来
                 temp6 = self.user_sns_dict.get(key, [])
@@ -274,11 +281,10 @@ class DataProcessor:
 
             # 特征3：标签本身的特性
             # 将标签的分类树映射到一个值，保证两个标签分类上越接近，值就越接近。
-            tag_value = self.sigmoid(self.get_tag_value(item))
+            tag_value = self.sigmoid(self.get_tag_value(temp10))
 
         # 特征四：用户本身的特性
         # 即用户的出生年份，性别和发微博数量
-        temp7 = self.user_dict[key]
         birth = self.sigmoid(temp7['birth'])
         gender = temp7['gender']
         tweetnum = self.sigmoid(temp7['tweetnum'])
@@ -296,9 +302,10 @@ class DataProcessor:
                 #     key_weight_dict = self.user_key_dict[key]
                 # else:
                 #     continue
+                temp12 = (self.user_tag_dict[key])[index]
                 for index in tqdm(range(len(self.user_tag_dict[key]))):
-                    item = int((self.user_tag_dict[key])[index]['itemid'])
-                    res = int((self.user_tag_dict[key])[index]['res'])
+                    item = int(temp12['itemid'])
+                    res = int(temp12['res'])
                     features = self.get_feature(
                         key, key_weight_dict, index, item)
 
