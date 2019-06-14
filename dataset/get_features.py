@@ -138,10 +138,26 @@ class DataProcessor:
 
     def get_key_overlap(self, key_weight_dict, item_key_set):
         ans = 0.0
-        for key in key_weight_dict:
+        """for key in key_weight_dict:
             if key in item_key_set:
-                ans += float(key_weight_dict[key])
-        element_num = len(set(key_weight_dict.keys()) | item_key_set)
+                ans += float(key_weight_dict[key])"""
+        # 考虑到key的互异性和有序性，排序后依次查找
+        key_weight_dict_key = list(set(key_weight_dict.keys()))
+        item_key_set.sort()
+        key_weight_dict_key.sort()
+        key_weight_dict_key_index = 0;
+        item_key_set_index = 0;
+        key_weight_dict_key_len = len(key_weight_dict_key)
+        item_key_set_len = len(item_key_set)
+        while key_weight_dict_key_index < key_weight_dict_key_len and item_key_set_index < item_key_set_len:
+            if item_key_set[item_key_set_index] < key_weight_dict_key[key_weight_dict_key_index]:
+                item_key_set_index = item_key_set_index + 1
+            elif item_key_set[item_key_set_index] > key_weight_dict_key[key_weight_dict_key_index]:
+                key_weight_dict_key_index = key_weight_dict_key_index + 1
+            else:
+                ans += float(key_weight_dict_key[key_weight_dict_key_index])
+
+        element_num = len(set(key_weight_dict_key) | item_key_set)
         return ans / element_num
 
     # 计算分类的重合度
@@ -151,15 +167,20 @@ class DataProcessor:
     def get_user_by_tag(self, item):
         users = []
         for key in range(len(self.user_tag_dict)):
+            # 避免多次访问self.user_tag_dict
+            tempDict1 = self.user_tag_dict[key]
             for index in range(len(self.user_tag_dict.get(key, []))):
-                if (self.user_tag_dict[key][index]['itemid'] == item):
+                if (tempDict1[index]['itemid'] == item):
                     users.append(key)
         return users
 
     # 计算兴趣标签的重合度
     # 计算方法是：二者的交集大小 / 二者的并集大小
     def get_tag_overlap(self, key, user):
-        return len(self.user_dict[key]['tags'] & self.user_dict[user]['tags']) * 1.0 / len(self.user_dict[key]['tags'] | self.user_dict[user]['tags'])
+        # 避免重复访问
+        temp2 = self.user_dict[key]['tags']
+        temp3 = self.user_dict[user]['tags']
+        return len(temp2 & temp3) * 1.0 / len(temp2 | temp3)
 
     # 归一化sigmoid函数
     def sigmoid(self, n):
@@ -208,33 +229,37 @@ class DataProcessor:
                 # 子特征2.1
                 tag_overlap = tag_overlap + self.get_tag_overlap(key, user)
                 # 子特征2.2
-                if user in self.user_sns_dict.get(key, []):
+                # 只要用了两次以上的都暂存起来
+                temp6 = self.user_sns_dict.get(key, [])
+                if user in temp6:
                     followee_portion = followee_portion + 1
                 # 子特征2.3
                 if key in self.user_sns_dict.get(user, []):
                     follower_portion = follower_portion + 1
                 # 子特征2.4
                 if self.user_action_dict.get(key, {}).get(user, []):
+                    # 避免多次访问
+                    temp4 = (self.user_action_dict[key])[user]
                     at_user = at_user + \
-                        int((self.user_action_dict[key])[user]['at'])
+                        int(temp4['at'])
                     re_user = re_user + \
-                        int((self.user_action_dict[key])[user]['re'])
+                        int(temp4['re'])
                     co_user = co_user + \
-                        int((self.user_action_dict[key])[user]['co'])
+                        int(temp4['co'])
 
                 # 子特征2.5
                 if self.user_action_dict.get(user, {}).get(key, []):
+                    temp5 = (self.user_action_dict[user])[key]
                     user_at = user_at + \
-                        int((self.user_action_dict[user])[key]['at'])
+                        int(temp5['at'])
                     user_re = user_re + \
-                        int((self.user_action_dict[user])[key]['re'])
+                        int(temp5['re'])
                     user_co = user_co + \
-                        int((self.user_action_dict[user])[key]['co'])
+                        int(temp5['co'])
 
             tag_overlap = tag_overlap / user_tag_list_len if user_tag_list_len != 0 else 0.0
             followee_portion = followee_portion / \
-                len(self.user_sns_dict[key]) if len(
-                    self.user_sns_dict.get(key, [])) != 0 else 0.0
+                len(self.user_sns_dict[key]) if len(temp6) != 0 else 0.0
             follower_sum = 0.00
             for u in self.user_sns_dict:
                 if key in self.user_sns_dict[u]:
@@ -253,9 +278,10 @@ class DataProcessor:
 
         # 特征四：用户本身的特性
         # 即用户的出生年份，性别和发微博数量
-        birth = self.user_dict[key]['birth']
-        gender = self.user_dict[key]['gender']
-        tweetnum = self.user_dict[key]['tweetnum']
+        temp7 = self.user_dict[key]
+        birth = self.sigmoid(temp7['birth'])
+        gender = temp7['gender']
+        tweetnum = self.sigmoid(temp7['tweetnum'])
 
         return [key_overlap, tag_overlap, followee_portion, follower_portion, at_user, re_user, co_user, user_at, user_re, user_co, tag_value, birth, gender, tweetnum]
 
