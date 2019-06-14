@@ -262,14 +262,14 @@ class DataProcessor:
     def write_dataset(self):
         with open('train.csv', 'w') as out:
             for i in tqdm(range(TRAIN_LEN)):
-                key,key_weight_dict= random.choice(list(self.user_tag_dict.items()))
-                print(key,key_weight_dict)
+                key = random.choice(list(self.user_tag_dict.keys()))
+                print(key)
                 # key_weight_dict = self.user_key_dict[key]
-                # outs = []
-                # if self.user_key_dict.__contains__(key):
-                #     key_weight_dict = self.user_key_dict[key]
-                # else:
-                #     continue
+                outs = []
+                if self.user_key_dict.__contains__(key):
+                    key_weight_dict = self.user_key_dict[key]
+                else:
+                    continue
                 for index in tqdm(range(len(self.user_tag_dict[key]))):
                     item = int((self.user_tag_dict[key])[index]['itemid'])
                     res = int((self.user_tag_dict[key])[index]['res'])

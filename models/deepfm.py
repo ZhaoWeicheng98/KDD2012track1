@@ -7,6 +7,7 @@ class DeepFM(nn.Module):
     '''
     A DeepFM network with RMSE loss for rates prediction problem.
     '''
+
     def __init__(self, feature_sizes, embedding_size=4, hidden_dims=[32, 32], num_classes=1, dropout=[0.5, 0.5], use_cuda=True):
         """
         Initialize a new network
@@ -31,10 +32,10 @@ class DeepFM(nn.Module):
         else:
             self.device = torch.device('cpu')
 
-        self.fm_embedings1 = nn.ModuleList(
-            [nn.Embedding(feature_size, 1) for feature_size in self.feature_sizes])
-        self.fm_embedings2 = nn.ModuleList([nn.Embedding(
-            feature_size, self.embedding_size) for feature_size in self.feature_sizes])
+        self.fm_embeddings1 = nn.ModuleList(
+            [nn.Embedding(feature_size+1, 1) for feature_size in self.feature_sizes])
+        self.fm_embeddings2 = nn.ModuleList([nn.Embedding(
+            feature_size+1, self.embedding_size) for feature_size in self.feature_sizes])
 
         all_dims = [self.field_size*self.embedding_size] + \
             self.hidden_dims+[self.num_classes]
@@ -51,11 +52,12 @@ class DeepFM(nn.Module):
         - Xi: A tensor of input's index, shape of (N, field_size, 1)
         - Xv: A tensor of input's value, shape of (N, field_size, 1)
         """
-        fm_emb_arr1 = [(torch.sum(emb(xi[:, i, :]), 1).t() * xv[:, i]).t()
+        fm_emb_arr1 = [(torch.sum(emb(xi[:, i,:]), 1).t() * xv[:, i]).t()
                        for i, emb in enumerate(self.fm_embeddings1)]
+        # print(fm_emb_arr1)
         fm_order1 = torch.cat(fm_emb_arr1, 1)
         # use 2xy = (x+y)^2 - x^2 - y^2 reduce calculation
-        fm_emb_arr2 = [(torch.sum(emb(xi[:, i, :]), 1).t() * xv[:, i]).t()
+        fm_emb_arr2 = [(torch.sum(emb(xi[:, i,:]), 1).t() * xv[:, i]).t()
                        for i, emb in enumerate(self.fm_embeddings2)]
         fm_sum_order_emb2 = sum(fm_emb_arr2)
         fm_sum_order_emb2_square = fm_sum_order_emb2 * \
@@ -69,7 +71,7 @@ class DeepFM(nn.Module):
 
         deep_emb = torch.cat(fm_emb_arr2, 1)
         deep_out = deep_emb
-        for i in range(1, self.hidden_dims + 1):
+        for i in range(1, len(self.hidden_dims) + 1):
             deep_out = getattr(self, 'linear_' + str(i))(deep_out)
             deep_out = getattr(self, 'batchNorm_' + str(i))(deep_out)
             deep_out = getattr(self, 'dropout_' + str(i))(deep_out)
@@ -91,10 +93,10 @@ class DeepFM(nn.Module):
         criterion = nn.BCEWithLogitsLoss()
 
         for i in range(epochs):
-            for t, (x1, xv, y) in enumerate(loader_train):
+            for t, (xi, xv, y) in enumerate(loader_train):
                 xi = xi.to(device=self.device, dtype=torch.long)
                 xv = xv.to(device=self.device, dtype=torch.float)
-                y = y.to(device=self.device, dtype=torch.long)
+                y = y.to(device=self.device, dtype=torch.float)
 
                 total = model(xi, xv)
                 loss = criterion(total, y)
@@ -103,11 +105,11 @@ class DeepFM(nn.Module):
                 optimizer.step()
 
                 if t % print_every == 0:
-                    print('Iteration %d, loss = %.4f' % (t, loss.item()))
+                    print('Epoch:%d, Iteration %d, loss = %.4f' % (i,t, loss.item()))
                     self.check_accuracy(loader_val, model)
                     print()
-        
-            torch.save(model.state_dict(), 'deepFM_{}.pth'.format(i))
+
+            torch.save(model.state_dict(), 'weights/deepFM_{}.pth'.format(i))
 
     def check_accuracy(self, loader, model):
         """
@@ -125,7 +127,7 @@ class DeepFM(nn.Module):
                 # move to device, e.g. GPU
                 xi = xi.to(device=self.device, dtype=torch.long)
                 xv = xv.to(device=self.device, dtype=torch.float)
-                y = y.to(device=self.device, dtype=torch.long)
+                y = y.to(device=self.device, dtype=torch.uint8)
                 total = model(xi, xv)
                 preds = (F.sigmoid(total) > 0.5)
                 num_correct += (preds == y).sum()

@@ -9,15 +9,15 @@ from models.deepfm import DeepFM
 from dataset.dataset import RecoDataset
 from dataset.get_features import DataProcessor
 
-dp = DataProcessor()
-dp.write_dataset()
+# dp = DataProcessor()
+# dp.write_dataset()
 # load data
 train_data = RecoDataset('./', train=True)
 loader_train = DataLoader(train_data, batch_size=100,
-                          sampler=sampler.SubsetRandomSampler(range(int(len(dp.user_tag_dict)*0.8))))
+                          sampler=sampler.SubsetRandomSampler(range(int(len(train_data)*0.8))))
 val_data = RecoDataset('./', train=True)
 loader_val = DataLoader(val_data, batch_size=100,
-                        sampler=sampler.SubsetRandomSampler(range(int(len(dp.user_tag_dict)*0.8), len(dp.user_tag_dict))))
+                        sampler=sampler.SubsetRandomSampler(range(int(len(train_data)*0.8), len(train_data))))
 
 # feature_sizes = np.loadtxt('./data/feature_sizes.txt', delimiter=',')
 # feature_sizes = [int(x) for x in feature_sizes]

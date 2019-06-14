@@ -31,13 +31,13 @@ class RecoDataset(Dataset):
     def __getitem__(self, idx):
         if self.train:
             dataI, targetI = self.train_data[idx, :], self.target[idx]
-            Xi = torch.from_numpy(dataI.astype(np.int32)).unsqueeze(-1)
-            Xv = torch.from_numpy(np.ones_like(dataI))
+            Xv = torch.from_numpy(dataI.astype(np.float))
+            Xi = torch.from_numpy(np.ones_like(dataI)).unsqueeze(-1)
             return Xi, Xv, targetI
         else:
             dataI = self.test_data.iloc[idx, :]
-            Xi = torch.from_numpy(dataI.astype(np.int32)).unsqueeze(-1)
-            Xv = torch.from_numpy(np.ones_like(dataI))
+            Xv = torch.from_numpy(dataI.astype(np.float))
+            Xi = torch.from_numpy(np.ones_like(dataI)).unsqueeze(-1)
             return Xi, Xv
 
     def __len__(self):
