@@ -4,22 +4,33 @@ import re
 
 import numpy as np
 from tqdm import tqdm
+import scipy as spy
+from scipy import sparse
 
 BASE_DIR = "./track1/"  # 数据根目录
 TRAIN_LEN = 100000  # 训练和测试所用数据量
 PROPORTION = 0.8  # 训练集占总数据量的多少
 INT_PATTERN = "^-?[0-9]+$"
 BASE_CATAGORY = 21  # 对catagory计量时的基
+MIN_USERID = 100044  # 最小user_id
+MAX_USERID = 3000000  # 最大user_id
+USER_NUM = 2500000  # user总数
+ITEM_NUM = 6096  # item总数
+# I guess no itemid will be larger than this, maybe it need to be corrected.
+MAX_ITEMID = 3000000
 
 
 class DataProcessor:
 
-    user_tag_dict = {}  # 存储 rec_log_train.txt 里的信息
-    item_dict = {}  # 存储 item.txt 里的信息
-    user_dict = {}  # 存储 user_profile.txt 里的信息
-    user_action_dict = {}  # 存储 user_action.txt 里的信息
-    user_sns_dict = {}  # 存储 user_sns.txt 里的信息
-    user_key_dict = {}  # 存储 user_key_word.txt 里的信息
+    item_dict = {}  # 存储 item.txt 里的信息，顺序为catagory，tags
+    user_dict = []  # 存储 user_profile.txt 里的信息, 顺序为birth，gender，tweetnum，tags
+    user_action_matrix_at = None
+    user_action_matrix_re = None
+    user_action_matrix_co = None  # 存储 user_action.txt 里的信息，顺序为at, re, co
+    user_sns_matrix = None  # 存储 user_sns.txt 里的信息
+    user_key_dict = [None] * USER_NUM  # 存储 user_key_word.txt 里的信息
+    user_index = [0] * (MAX_USERID)  # user_id到index的映射
+    user_tag_matrix = None  # store message in rec_log_train.txt
 
     def strList2intList(self, strList, correctNum):
         # 将string的list转成int的list存储以缩小内存，若不合int形式则用correctNum代替。
@@ -39,27 +50,53 @@ class DataProcessor:
             return correctNum
 
     def __init__(self):
+
+        # 读 user_profile.txt
+        # 任务：1. 由于user_id有序，故建立user_id到index的映射（数组占用率差不多50%，感觉还行），并直接用数组存储数据
+        print('loading user_profile.txt')
+        user_profile_txt = open(BASE_DIR + "user_profile.txt")
+        for i, user_profile_line in enumerate(tqdm(user_profile_txt)):
+            # user_profile_line = user_profile_txt.readline()
+            if not user_profile_line:
+                break
+            else:
+                # 根据\t分割
+                user_profile_msg = user_profile_line.split('\t')
+                # 存储用户信息及映射
+                self.user_index[int(user_profile_msg[0])] = i
+                self.user_dict.append([self.str2int(user_profile_msg[1], 2000), self.str2int(
+                    user_profile_msg[2], 0), self.str2int(user_profile_msg[3], 0), set(self.strList2intList(user_profile_msg[4].split(';'), 0))])
+
         # 读 rec_log_train.txt
         print('loading rec_log_train.txt')
         rec_log_train_txt = open(BASE_DIR + "rec_log_train.txt")
+        row = []  # store userid
+        col = []  # store tagid
+        value = []  # store res
+        # ignore timestamp
         for i, train_line in enumerate(tqdm(rec_log_train_txt)):
             if train_line:
                 # 根据\t分割
                 train_msg = train_line.split('\t')
                 # 存储所有正向数据
                 if train_msg[2] == '1':
-                    self.user_tag_dict.setdefault(int(train_msg[0]), [])
-                    self.user_tag_dict[int(train_msg[0])].append(
-                        {'itemid': int(train_msg[1]), 'res': int(train_msg[2]), 'time': int(train_msg[3])})
+                    row.append(int(train_msg[0]))
+                    col.append(int(train_msg[1]))
+                    value.append(int(train_msg[2]))
                 # 由于原数据集中有大约92%的负向数据，故为了保持正负向数据的均衡，以10%的概率随机挑选负向数据
                 else:
                     ran = random.randint(0, 9)
                     if ran == 0:
-                        self.user_tag_dict.setdefault(int(train_msg[0]), [])
-                        self.user_tag_dict[int(train_msg[0])].append(
-                            {'itemid': int(train_msg[1]), 'res': int(train_msg[2]), 'time': int(train_msg[3])})
+                        row.append(int(train_msg[0]))
+                        col.append(int(train_msg[1]))
+                        value.append(int(train_msg[2]))
             else:
                 break
+        self.user_tag_matrix = sparse.csc_matrix(
+            (value, (row, col)), shape=(MAX_USERID, MAX_ITEMID))
+        row = []
+        col = []
+        value = []
 
         # 读 item.txt
         print('loading item.txt')
@@ -73,24 +110,11 @@ class DataProcessor:
                 item_msg = item_line.split('\t')
                 # 存储分类目录和相关关键词
                 self.item_dict.setdefault(int(item_msg[0]), [])
-                self.item_dict[int(item_msg[0])] = (
-                    {'catagory': self.strList2intList(item_msg[1].split('.'), 0), 'tags': set(self.strList2intList(item_msg[2].split(';'), 0))})
-
-        # 读 user_profile.txt
-        print('loading user_profile.txt')
-        user_profile_txt = open(BASE_DIR + "user_profile.txt")
-        for i, user_profile_line in enumerate(tqdm(user_profile_txt)):
-            # user_profile_line = user_profile_txt.readline()
-            if not user_profile_line:
-                break
-            else:
-                # 根据\t分割
-                user_profile_msg = user_profile_line.split('\t')
-                # 存储用户信息
-                self.user_dict.setdefault(int(user_profile_msg[0]), {})
-                self.user_dict[int(user_profile_msg[0])] = {'birth': self.str2int(user_profile_msg[1], 2000), 'gender': self.str2int(
-                    user_profile_msg[2], 0), 'tweetnum': self.str2int(user_profile_msg[3], 0), 'tags': set(self.strList2intList(user_profile_msg[4].split(';'), 0))}
-
+                self.item_dict[int(item_msg[0])] = [self.strList2intList(item_msg[1].split(
+                    '.'), 0), set(self.strList2intList(item_msg[2].split(';'), 0))]
+        value_at = []
+        value_re = []
+        value_co = []
         # 读 user_action.txt
         print('loading user_action.txt')
         user_action_txt = open(BASE_DIR + 'user_action.txt')
@@ -100,9 +124,20 @@ class DataProcessor:
                 break
             else:
                 user_action_msg = user_action_line.split('\t')
-                self.user_action_dict.setdefault(int(user_action_msg[0]), {})
-                (self.user_action_dict[int(user_action_msg[0])])[int(user_action_msg[1])] = {
-                    'at': int(user_action_msg[2]), 're': int(user_action_msg[3]), 'co': int(user_action_msg[4])}
+                row.append(int(user_action_msg[0]))
+                col.append(int(user_action_msg[1]))
+                value_at.append(int(user_action_msg[2]))
+                value_re.append(int(user_action_msg[3]))
+                value_co.append(int(user_action_msg[4]))
+        self.user_action_matrix_at = sparse.csc_matrix(
+            (value_at, (row, col)), shape=(MAX_USERID, MAX_USERID))
+        self.user_action_matrix_re = sparse.csc_matrix(
+            (value_re, (row, col)), shape=(MAX_USERID, MAX_USERID))
+        self.user_action_matrix_co = sparse.csc_matrix(
+            (value_co, (row, col)), shape=(MAX_USERID, MAX_USERID))
+        row = []
+        col = []
+        value = []
 
         # 读 user_sns.txt
         print('loading user_sns.txt')
@@ -113,9 +148,15 @@ class DataProcessor:
                 break
             else:
                 user_sns_msg = user_sns_line.split('\t')
-                self.user_sns_dict.setdefault(int(user_sns_msg[0]), [])
-                self.user_sns_dict[int(user_sns_msg[0])].append(
+                row.append(int(user_sns_msg[0]))
+                col.append(
                     int(user_sns_msg[1]))
+                value.append(1)
+        self.user_sns_matrix = sparse.csc_matrix(
+            (value, (row, col)), shape=(MAX_USERID, MAX_USERID))
+        row = []
+        col = []
+        value = []
 
         # 读 user_key_word.txt
         print('loading user_keyword.txt')
@@ -126,12 +167,13 @@ class DataProcessor:
                 break
             else:
                 user_key_word_msg = user_key_word_line.split('\t')
+                self.user_key_dict[self.user_index[int(user_key_word_msg[0])]] = {
+                }
                 key_words = user_key_word_msg[1].split(';')
                 for kw in key_words:
                     kw_split = kw.split(':')
-                    self.user_key_dict.setdefault(
-                        int(user_key_word_msg[0]), {})
-                    (self.user_key_dict[int(user_key_word_msg[0])])[
+
+                    (self.user_key_dict[self.user_index[int(user_key_word_msg[0])]])[
                         int(kw_split[0])] = float(kw_split[1])
 
     # 计算标签的关键字和用户的关键字之间的重合度
@@ -139,47 +181,29 @@ class DataProcessor:
 
     def get_key_overlap(self, key_weight_dict, item_key_set):
         ans = 0.0
-        """for key in key_weight_dict:
+        for key in key_weight_dict:
             if key in item_key_set:
-                ans += float(key_weight_dict[key])"""
-        # 考虑到key的互异性和有序性，排序后依次查找
-        key_weight_dict_key = list(set(key_weight_dict.keys()))
-        item_key_set = list(item_key_set)
-        item_key_set.sort()
-        key_weight_dict_key.sort()
-        key_weight_dict_key_index = 0
-        item_key_set_index = 0
-        key_weight_dict_key_len = len(key_weight_dict_key)
-        item_key_set_len = len(item_key_set)
-        while key_weight_dict_key_index < key_weight_dict_key_len and item_key_set_index < item_key_set_len:
-            if item_key_set[item_key_set_index] < key_weight_dict_key[key_weight_dict_key_index]:
-                item_key_set_index = item_key_set_index + 1
-            elif item_key_set[item_key_set_index] > key_weight_dict_key[key_weight_dict_key_index]:
-                key_weight_dict_key_index = key_weight_dict_key_index + 1
-            else:
-                ans += float(key_weight_dict_key[key_weight_dict_key_index])
+                ans += float(key_weight_dict[key])
 
-        element_num = len(set(key_weight_dict_key) | set(item_key_set))
+        element_num = len(set(key_weight_dict.keys()) | set(item_key_set))
         return ans / element_num
 
     # 从训练数据找到所有关注该标签的用户
     def get_user_by_tag(self, item):
         users = []
-        for key in self.user_tag_dict:
-            # 避免多次访问self.user_tag_dict
-            tempDict1 = self.user_tag_dict[key]
-            temp11 = self.user_tag_dict.get(key, [])
-            for index in range(len(temp11)):
-                if (tempDict1[index]['itemid'] == item):
-                    users.append(key)
+        tempusers = self.user_tag_matrix[:, item]
+        # select users whose res = 1
+        for u in tempusers.nonzero()[0]:
+            if self.user_tag_matrix[u, item] == 1:
+                users.append(u)
         return users
 
     # 计算兴趣标签的重合度
     # 计算方法是：二者的交集大小 / 二者的并集大小
     def get_tag_overlap(self, temp7, user):
         # 避免重复访问
-        temp2 = temp7['tags']
-        temp3 = self.user_dict[user]['tags']
+        temp2 = temp7[3]
+        temp3 = self.user_dict[self.user_index[user]][3]
         return len(temp2 & temp3) * 1.0 / len(temp2 | temp3)
 
     # 归一化sigmoid函数
@@ -189,7 +213,7 @@ class DataProcessor:
     # 计算分类的重合度
     # 居然有不够四层的，辣鸡腾讯
     def get_tag_value(self, temp10):
-        item_catagory = temp10['catagory']
+        item_catagory = temp10[0]
         ret = 0
         for i in range(len(item_catagory)):
             ret = ret * BASE_CATAGORY
@@ -205,7 +229,7 @@ class DataProcessor:
         key = int(key)
         item = int(item)
         temp10 = self.item_dict[item]
-        item_key_set = temp10['tags']
+        item_key_set = temp10[1]
 
         # 特征1：标签的关键字和用户的关键字之间的重合度
         key_overlap = self.get_key_overlap(key_weight_dict, item_key_set)
@@ -232,48 +256,48 @@ class DataProcessor:
         user_co = 0.0
         tag_value = 0
 
-        temp7 = self.user_dict[key]
+        temp7 = self.user_dict[self.user_index[key]]
         if user_tag_list_len > 0:
             for user in user_tag_list:
+                user = int(user)
                 # 子特征2.1
                 tag_overlap = tag_overlap + self.get_tag_overlap(temp7, user)
                 # 子特征2.2
-                # 只要用了两次以上的都暂存起来
-                temp6 = self.user_sns_dict.get(key, [])
-                if user in temp6:
+                if self.user_sns_matrix[key, user]:
                     followee_portion = followee_portion + 1
                 # 子特征2.3
-                if key in self.user_sns_dict.get(user, []):
+                if self.user_sns_matrix[user, key]:
                     follower_portion = follower_portion + 1
                 # 子特征2.4
-                if self.user_action_dict.get(key, {}).get(user, []):
-                    # 避免多次访问
-                    temp4 = (self.user_action_dict[key])[user]
-                    at_user = at_user + \
-                        int(temp4['at'])
-                    re_user = re_user + \
-                        int(temp4['re'])
-                    co_user = co_user + \
-                        int(temp4['co'])
+                temp20_at = self.user_action_matrix_at[key, user]
+                temp20_re = self.user_action_matrix_re[key, user]
+                temp20_co = self.user_action_matrix_co[key, user]
+                at_user = at_user + \
+                    int(temp20_at)
+                re_user = re_user + \
+                    int(temp20_re)
+                co_user = co_user + \
+                    int(temp20_co)
 
                 # 子特征2.5
-                if self.user_action_dict.get(user, {}).get(key, []):
-                    temp5 = (self.user_action_dict[user])[key]
-                    user_at = user_at + \
-                        int(temp5['at'])
-                    user_re = user_re + \
-                        int(temp5['re'])
-                    user_co = user_co + \
-                        int(temp5['co'])
+                temp20_at = self.user_action_matrix_at[user, key]
+                temp20_re = self.user_action_matrix_re[user, key]
+                temp20_co = self.user_action_matrix_co[user, key]
+                user_at = user_at + \
+                    int(temp20_at)
+                user_re = user_re + \
+                    int(temp20_re)
+                user_co = user_co + \
+                    int(temp20_co)
 
             tag_overlap = tag_overlap / user_tag_list_len if user_tag_list_len != 0 else 0.0
             followee_portion = followee_portion / \
-                len(self.user_sns_dict[key]) if len(temp6) != 0 else 0.0
+                len(self.user_sns_matrix[key,:].nonzero()[1]) if len(
+                    self.user_sns_matrix[key,:].nonzero()[1]) != 0 else 0.0
             follower_sum = 0.00
-            for u in self.user_sns_dict:
-                if key in self.user_sns_dict[u]:
-                    follower_sum = follower_sum + 1
-            follower_portion = follower_portion / follower_sum if follower_sum != 0 else 0.0
+            follower_portion = follower_portion / \
+                len(self.user_sns_matrix[:, user].nonzero()[0]) if len(
+                    self.user_sns_matrix[:, user].nonzero()[0]) != 0 else 0.0
             at_user = self.sigmoid(at_user / user_tag_list_len)
             re_user = self.sigmoid(re_user / user_tag_list_len)
             co_user = self.sigmoid(co_user / user_tag_list_len)
@@ -287,27 +311,27 @@ class DataProcessor:
 
         # 特征四：用户本身的特性
         # 即用户的出生年份，性别和发微博数量
-        birth = self.sigmoid(temp7['birth'])
-        gender = temp7['gender']
-        tweetnum = self.sigmoid(temp7['tweetnum'])
+        birth = self.sigmoid(temp7[0])
+        gender = temp7[1]
+        tweetnum = self.sigmoid(temp7[2])
 
         return [key_overlap, tag_overlap, followee_portion, follower_portion, at_user, re_user, co_user, user_at, user_re, user_co, tag_value, birth, gender, tweetnum]
 
     def write_dataset(self):
         with open('train.csv', 'w') as out:
             for i in tqdm(range(TRAIN_LEN)):
-                key = random.choice(list(self.user_tag_dict.keys()))
+                key = random.choice(self.user_tag_matrix.indices)
                 print(key)
                 # key_weight_dict = self.user_key_dict[key]
                 outs = []
-                if self.user_key_dict.__contains__(key):
-                    key_weight_dict = self.user_key_dict[key]
-                else:
+                key_weight_dict = self.user_key_dict[key]
+                if key_weight_dict is None:
                     continue
-                for temp12 in tqdm(self.user_tag_dict[key]):
+                for item in tqdm(self.user_tag_matrix[key].nonzero()[1]):
                     # temp12 = (self.user_tag_dict[key])[index]
-                    item = int(temp12['itemid'])
-                    res = int(temp12['res'])
+                    # item = int(temp12['itemid'])
+                    # res = int(temp12['res'])
+                    res = self.user_tag_matrix[key, item]
                     features = self.get_feature(
                         key, key_weight_dict, item)
 
@@ -318,5 +342,6 @@ class DataProcessor:
                                     .rstrip('.'))
 
                     vals = ','.join(vals)
+                    print(vals)
                     outs.append(','.join([vals, str(res)]) + '\n')
                 out.write(''.join(outs))
