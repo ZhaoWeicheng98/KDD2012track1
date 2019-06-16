@@ -23,7 +23,7 @@ class RecoDataset(Dataset):
         if self.train:
             data = pd.read_csv(os.path.join(root, 'train.csv'))
             self.train_data = data.iloc[:, :-1].values
-            self.target = data.iloc[:, -1].values
+            self.target = np.sign(data.iloc[:, -1].values)
         else:
             data = pd.read_csv(os.path.join(root, 'test.csv'))
             self.test_data = data.iloc[:, :-1].values
