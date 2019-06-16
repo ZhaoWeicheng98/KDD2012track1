@@ -47,7 +47,7 @@ class DeepFM(nn.Module):
 
     def forward(self, xi, xv):
         """
-        Forward process of network. 
+        Forward process of network.
         Inputs:
         - Xi: A tensor of input's index, shape of (N, field_size, 1)
         - Xv: A tensor of input's value, shape of (N, field_size, 1)
@@ -87,7 +87,7 @@ class DeepFM(nn.Module):
         - loader_train: I
         - optimizer: Abstraction of optimizer used in training process, e.g., "torch.optim.Adam()""torch.optim.SGD()".
         - epochs: Integer, number of epochs.
-        - print_every: Integer, print after every number of iterations. 
+        - print_every: Integer, print after every number of iterations.
         """
         model = self.train().to(device=self.device)
         criterion = nn.BCEWithLogitsLoss()
