@@ -16,8 +16,7 @@ MIN_USERID = 100044  # 最小user_id
 MAX_USERID = 3000000  # 最大user_id
 USER_NUM = 2500000  # user总数
 ITEM_NUM = 6096  # item总数
-# I guess no itemid will be larger than this, maybe it need to be corrected.
-MAX_ITEMID = 3000000
+MAX_ITEMID = 3000000 # 最大item_id
 
 
 class DataProcessor:
@@ -70,10 +69,10 @@ class DataProcessor:
         # 读 rec_log_train.txt
         print('loading rec_log_train.txt')
         rec_log_train_txt = open(BASE_DIR + "rec_log_train.txt")
-        row = []  # store userid
-        col = []  # store tagid
-        value = []  # store res
-        # ignore timestamp
+        row = []
+        col = []
+        value = []
+        # 无视掉了时间戳
         for i, train_line in enumerate(tqdm(rec_log_train_txt)):
             if train_line:
                 # 根据\t分割
@@ -278,7 +277,6 @@ class DataProcessor:
                     int(temp20_re)
                 co_user = co_user + \
                     int(temp20_co)
-
                 # 子特征2.5
                 temp20_at = self.user_action_matrix_at[user, key]
                 temp20_re = self.user_action_matrix_re[user, key]
@@ -334,7 +332,6 @@ class DataProcessor:
                     res = self.user_tag_matrix[key, item]
                     features = self.get_feature(
                         key, key_weight_dict, item)
-
                     vals = []
 
                     for i in range(0, len(features)):
