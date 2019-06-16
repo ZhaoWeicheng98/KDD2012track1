@@ -15,8 +15,7 @@ class DeepFM(nn.Module):
         - feature_size: A list of integer giving the size of features for each field.
         - embedding_size: An integer giving size of feature embedding.
         - hidden_dims: A list of integer giving the size of each hidden layer.
-        - num_classes: An integer giving the number of classes to predict. For example,
-                    someone may rate 1,2,3,4 or 5 stars to a film.
+        - num_classes: An integer giving the number of classes to predict.
         - use_cuda: Bool, Using cuda or not
         """
         super(DeepFM, self).__init__()
